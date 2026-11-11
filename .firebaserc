@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "famille-dev",
+    "dev": "famille-dev",
+    "prod": "famille-prod"
+  }
+}

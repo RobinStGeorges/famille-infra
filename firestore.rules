@@ -1,0 +1,126 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Fonctions utilitaires ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(fid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/families/$(fid)/members/$(request.auth.uid));
+    }
+
+    function isOwner(fid) {
+      return signedIn()
+        && get(/databases/$(database)/documents/families/$(fid)).data.ownerUid == request.auth.uid;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // ---------- Administrateurs (créés à la main dans la console) ----------
+
+    match /admins/{uid} {
+      allow read, write: if false;
+    }
+
+    // ---------- Catalogue des mini-applications ----------
+
+    match /catalog/{appId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---------- Profil utilisateur ----------
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['displayName', 'familyId']);
+      allow delete: if false;
+    }
+
+    // ---------- Codes d'invitation ----------
+    // Un code est aléatoire et impossible à deviner : on autorise la lecture
+    // d'un code précis (get), jamais le listage.
+
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && isOwner(request.resource.data.fid)
+        && request.resource.data.keys().hasOnly(['fid', 'expiresAt', 'createdBy'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.expiresAt is timestamp;
+      allow delete: if signedIn() && isOwner(resource.data.fid);
+      allow update: if false;
+    }
+
+    // ---------- Familles ----------
+
+    match /families/{fid} {
+      allow get: if isMember(fid);
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'ownerUid', 'createdAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60;
+
+      allow update: if isOwner(fid)
+        && request.resource.data.keys().hasOnly(['name', 'ownerUid', 'createdAt'])
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60;
+
+      allow delete: if false;
+
+      // Membres de la famille
+      match /members/{uid} {
+        allow read: if isMember(fid);
+        allow update: if false;
+
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['displayName', 'role', 'inviteCode', 'joinedAt'])
+          && request.resource.data.keys().hasAll(['displayName', 'role', 'joinedAt'])
+          && request.resource.data.displayName is string
+          && (
+            // Cas 1 : le créateur de la famille (écriture groupée avec la famille)
+            (
+              !exists(/databases/$(database)/documents/families/$(fid))
+              && getAfter(/databases/$(database)/documents/families/$(fid)).data.ownerUid == request.auth.uid
+              && request.resource.data.role == 'owner'
+            )
+            // Cas 2 : un invité avec un code valide et non expiré
+            || (
+              'inviteCode' in request.resource.data
+              && request.resource.data.role == 'member'
+              && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.fid == fid
+              && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.expiresAt > request.time
+            )
+          );
+
+        allow delete: if signedIn() && (request.auth.uid == uid || isOwner(fid));
+      }
+    }
+
+    // ---------- Données des mini-applications ----------
+    // Règle générique : tout membre de la famille peut lire et écrire sous
+    // families/{fid}/apps/{appId}/... Ajouter une application ne nécessite
+    // AUCUNE modification de ce fichier.
+
+    match /families/{fid}/apps/{appId}/{path=**} {
+      allow read, write: if isMember(fid);
+    }
+  }
+}
