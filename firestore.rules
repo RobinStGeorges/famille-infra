@@ -19,6 +19,12 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/families/$(fid)).data.ownerUid == request.auth.uid;
     }
 
+    // La famille existe et n'a pas été supprimée.
+    function familyActive(fid) {
+      return exists(/databases/$(database)/documents/families/$(fid))
+        && get(/databases/$(database)/documents/families/$(fid)).data.get('deletedAt', null) == null;
+    }
+
     function isAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
@@ -44,6 +50,18 @@ service cloud.firestore {
       allow create, update: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['displayName', 'familyId']);
       allow delete: if false;
+
+      // Index des familles de la personne (sert uniquement à les lister).
+      // Création : seulement pour une famille dont on est (ou devient, dans le même lot) membre.
+      // Suppression : par la personne elle-même, ou par le propriétaire de la famille concernée.
+      match /memberships/{fid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['joinedAt'])
+          && existsAfter(/databases/$(database)/documents/families/$(fid)/members/$(uid));
+        allow update: if false;
+        allow delete: if signedIn() && (request.auth.uid == uid || isOwner(fid));
+      }
     }
 
     // ---------- Codes d'invitation ----------
@@ -75,8 +93,10 @@ service cloud.firestore {
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 60;
 
+      // Le propriétaire peut renommer la famille ou la marquer comme supprimée (deletedAt).
       allow update: if isOwner(fid)
-        && request.resource.data.keys().hasOnly(['name', 'ownerUid', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['name', 'ownerUid', 'createdAt', 'deletedAt'])
+        && (request.resource.data.get('deletedAt', null) == null || request.resource.data.deletedAt is timestamp)
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -107,6 +127,7 @@ service cloud.firestore {
               && request.resource.data.role == 'member'
               && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.fid == fid
               && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.expiresAt > request.time
+              && familyActive(fid)
             )
           );
 

@@ -58,3 +58,25 @@ families/{fid}/apps/{appId}/...                   données de chaque mini-app (r
 - Pas de Cloud Functions (forfait Spark) : création de famille et invitations gérées
   côté client, contrôlées par les règles.
 - Code d'invitation : aléatoire, durée limitée, lisible uniquement par `get` (jamais listable).
+
+## Familles multiples (version 0.2.0)
+
+Une personne peut appartenir à plusieurs familles. Nouveautés des règles :
+
+- `users/{uid}/memberships/{familleId}` : index des familles d'une personne (lecture par elle seule ; création
+  seulement pour une famille dont elle est membre ; suppression par elle-même ou par le propriétaire).
+- Une famille supprimée reçoit `deletedAt` : tous ses membres sont retirés, plus personne ne peut la lire, la
+  rejoindre (même avec un code encore valide) ni la « ressusciter ».
+- Le propriétaire peut renommer sa famille (`name`) ; `ownerUid` ne change jamais.
+
+### Purger les données d'une famille supprimée
+
+Le navigateur ne peut pas parcourir les données de toutes les applications : supprimer une famille la rend
+**inaccessible**, mais ses données (listes, parties, événements…) restent stockées. Pour les effacer vraiment
+(à faire de temps en temps, famille par famille, depuis la console Firebase on repère les familles avec `deletedAt`) :
+
+```
+npx firebase firestore:delete families/<IDENTIFIANT> --recursive --force --project prod
+```
+
+Attention : cela efface aussi le marquage « supprimée » ; sans conséquence pratique, personne ne connaît plus l'identifiant.
