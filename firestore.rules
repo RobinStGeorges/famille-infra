@@ -106,7 +106,9 @@ service cloud.firestore {
 
       // Membres de la famille
       match /members/{uid} {
-        allow read: if isMember(fid);
+        // Un invité doit pouvoir vérifier s'il a déjà rejoint cette famille avant de tenter
+        // l'inscription. Il ne peut lire que son propre document tant qu'il n'est pas membre.
+        allow read: if isMember(fid) || (signedIn() && request.auth.uid == uid);
         allow update: if false;
 
         allow create: if signedIn()

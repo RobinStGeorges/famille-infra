@@ -7,7 +7,7 @@ import {
 import {
   doc, getDoc, setDoc, deleteDoc, updateDoc, writeBatch, collection, getDocs, Timestamp,
 } from 'firebase/firestore';
-import { beforeAll, afterAll, beforeEach, describe, test } from 'vitest';
+import { beforeAll, afterAll, beforeEach, describe, expect, test } from 'vitest';
 
 let env;
 
