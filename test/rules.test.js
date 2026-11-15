@@ -364,4 +364,12 @@ describe('familles multiples : renommage', () => {
     await assertFails(updateDoc(doc(alice, 'families/f1'), { secret: 1 }));
     await assertFails(updateDoc(doc(alice, 'families/f1'), { deletedAt: 'hier' }));
   });
+  test('seul le propriétaire peut choisir une couleur de tuile autorisée', async () => {
+    await seedMemberships();
+    const alice = env.authenticatedContext('alice').firestore();
+    const bob = env.authenticatedContext('bob').firestore();
+    await assertSucceeds(updateDoc(doc(alice, 'families/f1'), { tileColor: '#1f7a63' }));
+    await assertFails(updateDoc(doc(bob, 'families/f1'), { tileColor: '#1e63c9' }));
+    await assertFails(updateDoc(doc(alice, 'families/f1'), { tileColor: 'red' }));
+  });
 });

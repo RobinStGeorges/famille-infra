@@ -95,8 +95,10 @@ service cloud.firestore {
 
       // Le propriétaire peut renommer la famille ou la marquer comme supprimée (deletedAt).
       allow update: if isOwner(fid)
-        && request.resource.data.keys().hasOnly(['name', 'ownerUid', 'createdAt', 'deletedAt'])
+        && request.resource.data.keys().hasOnly(['name', 'ownerUid', 'createdAt', 'deletedAt', 'tileColor'])
         && (request.resource.data.get('deletedAt', null) == null || request.resource.data.deletedAt is timestamp)
+        && (!('tileColor' in request.resource.data)
+          || request.resource.data.tileColor in ['#1f7a63', '#1e63c9', '#7b3fe4', '#b8530a', '#ad1457', '#00838f', '#5d4037', '#455a64'])
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
